@@ -23,3 +23,4 @@ Performance monitor support
    nvidia-tegra410-pmu
    meson-ddr-pmu
    cxl
+   ampere_cspmu
