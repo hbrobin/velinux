@@ -767,6 +767,9 @@ const char *acpi_get_subsystem_id(acpi_handle handle);
 #define ACPI_HANDLE(dev)		(NULL)
 #define ACPI_HANDLE_FWNODE(fwnode)	(NULL)
 
+/* Get rid of the -Wunused-variable for adev */
+#define acpi_dev_uid_match(adev, uid2)			(adev && false)
+
 #include <acpi/acpi_numa.h>
 
 struct fwnode_handle;

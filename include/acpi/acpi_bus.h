@@ -766,6 +766,46 @@ static inline bool acpi_device_can_poweroff(struct acpi_device *adev)
 bool acpi_dev_hid_uid_match(struct acpi_device *adev, const char *hid2, const char *uid2);
 int acpi_dev_uid_to_integer(struct acpi_device *adev, u64 *integer);
 
+static inline bool acpi_str_uid_match(struct acpi_device *adev, const char *uid2)
+{
+	const char *uid1 = acpi_device_uid(adev);
+
+	return uid1 && uid2 && !strcmp(uid1, uid2);
+}
+
+static inline bool acpi_int_uid_match(struct acpi_device *adev, u64 uid2)
+{
+	u64 uid1;
+
+	return !acpi_dev_uid_to_integer(adev, &uid1) && uid1 == uid2;
+}
+
+#define TYPE_ENTRY(type, x)			\
+	const type: x,				\
+	type: x
+
+#define ACPI_STR_TYPES(match)			\
+	TYPE_ENTRY(unsigned char *, match),	\
+	TYPE_ENTRY(signed char *, match),		\
+	TYPE_ENTRY(char *, match),		\
+	TYPE_ENTRY(void *, match)
+
+/**
+ * acpi_dev_uid_match - Match device by supplied UID
+ * @adev: ACPI device to match.
+ * @uid2: Unique ID of the device.
+ *
+ * Matches UID in @adev with given @uid2.
+ *
+ * Returns: %true if matches, %false otherwise.
+ */
+#define acpi_dev_uid_match(adev, uid2)					\
+	_Generic(uid2,							\
+		 /* Treat @uid2 as a string for acpi string types */	\
+		 ACPI_STR_TYPES(acpi_str_uid_match),			\
+		 /* Treat as an integer otherwise */			\
+		 default: acpi_int_uid_match)(adev, uid2)
+
 void acpi_dev_clear_dependencies(struct acpi_device *supplier);
 bool acpi_dev_ready_for_enumeration(const struct acpi_device *device);
 struct acpi_device *acpi_dev_get_next_consumer_dev(struct acpi_device *supplier,
