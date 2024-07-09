@@ -50,7 +50,7 @@ int __init z_erofs_deflate_init(void)
 	return 0;
 }
 
-int z_erofs_load_deflate_config(struct super_block *sb,
+static int z_erofs_load_deflate_config(struct super_block *sb,
 			struct erofs_super_block *dsb, void *data, int size)
 {
 	struct z_erofs_deflate_cfgs *dfl = data;
@@ -98,8 +98,8 @@ failed:
 	return -ENOMEM;
 }
 
-int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
-			       struct page **pgpl)
+static int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
+				      struct page **pgpl)
 {
 	const unsigned int nrpages_out =
 		PAGE_ALIGN(rq->pageofs_out + rq->outputsize) >> PAGE_SHIFT;
@@ -253,3 +253,9 @@ failed_zinit:
 	wake_up(&z_erofs_deflate_wq);
 	return err;
 }
+
+const struct z_erofs_decompressor z_erofs_deflate_decomp = {
+	.config = z_erofs_load_deflate_config,
+	.decompress = z_erofs_deflate_decompress,
+	.name = "deflate",
+};
