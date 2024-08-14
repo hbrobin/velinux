@@ -5027,6 +5027,9 @@ int numa_migrate_prep(struct page *page, struct vm_area_struct *vma,
 	vma_set_access_pid_bit(vma);
 
 	count_vm_numa_event(NUMA_HINT_FAULTS);
+#ifdef CONFIG_NUMA_BALANCING
+	count_memcg_folio_events(page_folio(page), NUMA_HINT_FAULTS, 1);
+#endif
 	if (page_nid == numa_node_id()) {
 		count_vm_numa_event(NUMA_HINT_FAULTS_LOCAL);
 		*flags |= TNF_FAULT_LOCAL;
