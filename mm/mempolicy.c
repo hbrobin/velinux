@@ -2367,7 +2367,7 @@ struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
 		nid = weighted_interleave_nid(pol, vma, addr, PAGE_SHIFT + order);
 		mpol_cond_put(pol);
 		gfp |= __GFP_COMP;
-		page = __alloc_pages(gfp, order, nid, NULL);
+		page = alloc_page_interleave(gfp, order, nid);
 		return page_rmappable_folio(page);
 	}
 
@@ -2459,8 +2459,8 @@ struct page *alloc_pages(gfp_t gfp, unsigned order)
 	if (pol->mode == MPOL_INTERLEAVE)
 		page = alloc_page_interleave(gfp, order, interleave_nodes(pol));
 	else if (pol->mode == MPOL_WEIGHTED_INTERLEAVE)
-		page = __alloc_pages(gfp, order, weighted_interleave_nodes(pol),
-				     NULL);
+		page = alloc_page_interleave(gfp, order,
+					     weighted_interleave_nodes(pol));
 	else if (pol->mode == MPOL_PREFERRED_MANY)
 		page = alloc_pages_preferred_many(gfp, order,
 				  policy_node(gfp, pol, numa_node_id()), pol);
