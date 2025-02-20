@@ -5326,6 +5326,7 @@ static bool skb_tstamp_tx_report_so_timestamping(struct sk_buff *skb,
 }
 
 static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
+						  struct skb_shared_hwtstamps *hwtstamps,
 						  struct sock *sk,
 						  int tstype)
 {
@@ -5334,6 +5335,11 @@ static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
 	switch (tstype) {
 	case SCM_TSTAMP_SCHED:
 		op = BPF_SOCK_OPS_TSTAMP_SCHED_CB;
+		break;
+	case SCM_TSTAMP_SND:
+		if (hwtstamps)
+			return;
+		op = BPF_SOCK_OPS_TSTAMP_SND_SW_CB;
 		break;
 	default:
 		return;
@@ -5356,7 +5362,8 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
 	if (skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
-		skb_tstamp_tx_report_bpf_timestamping(orig_skb, sk, tstype);
+		skb_tstamp_tx_report_bpf_timestamping(orig_skb, hwtstamps,
+						      sk, tstype);
 	if (!skb_tstamp_tx_report_so_timestamping(orig_skb, hwtstamps, tstype))
 		return;
 
