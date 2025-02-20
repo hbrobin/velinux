@@ -321,6 +321,7 @@ struct sk_filter;
   *	@sk_use_task_frag: allow sk_page_frag() to use current->task_frag.
   *			   Sockets that can be used under memory reclaim should
   *			   set this to false.
+  *	@sk_bpf_cb_flags: used in bpf_setsockopt()
   *	@sk_bind_phc: SO_TIMESTAMPING bind PHC index of PTP virtual clock
   *	              for timestamping
   *	@sk_tskey: counter to disambiguate concurrent tstamp requests
@@ -520,6 +521,8 @@ struct sock {
 				sk_txtime_report_errors : 1,
 				sk_txtime_unused : 6;
 	bool			sk_use_task_frag;
+#define SK_BPF_CB_FLAG_TEST(SK, FLAG) ((SK)->sk_bpf_cb_flags & (FLAG))
+	u8			sk_bpf_cb_flags;
 
 	struct socket		*sk_socket;
 	void			*sk_user_data;
