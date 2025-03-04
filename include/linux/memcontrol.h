@@ -401,6 +401,10 @@ struct mem_cgroup {
 	unsigned long watermark[NR_MEMCG_WMARK];
 	struct mutex wmark_lock;
 #endif
+
+#ifdef CONFIG_ASYNC_FORK
+	unsigned long async_fork;
+#endif
 	struct mem_cgroup_per_node *nodeinfo[];
 };
 
@@ -1685,6 +1689,29 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 }
 #endif /* CONFIG_MEMCG */
 
+#ifdef CONFIG_ASYNC_FORK
+static inline unsigned long task_async_fork(struct task_struct *p)
+{
+	struct mem_cgroup *task_memcg;
+	unsigned long async_fork = 0UL;
+
+	if (mem_cgroup_disabled())
+		return 0UL;
+
+	rcu_read_lock();
+	task_memcg = mem_cgroup_from_task(p);
+	if (task_memcg)
+		async_fork = task_memcg->async_fork;
+	rcu_read_unlock();
+
+	return async_fork;
+}
+#else
+static inline unsigned long task_async_fork(struct task_struct *p)
+{
+	return 0UL;
+}
+#endif
 static inline void __inc_lruvec_kmem_state(void *p, enum node_stat_item idx)
 {
 	__mod_lruvec_kmem_state(p, idx, 1);

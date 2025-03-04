@@ -502,6 +502,8 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 {
 	struct vm_area_struct *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 
+	async_fork_fixup_vma(orig);
+
 	if (!new)
 		return NULL;
 
@@ -654,9 +656,13 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	unsigned long charge = 0;
 	LIST_HEAD(uf);
 	VMA_ITERATOR(vmi, mm, 0);
+	unsigned long async_fork;
 
 	if (mmap_write_lock_killable(oldmm))
 		return -EINTR;
+
+	/* Get task_async_fork with oldmm's mmap write lock hold. */
+	async_fork = task_async_fork(current);
 	flush_cache_dup_mm(oldmm);
 	uprobe_dup_mmap(oldmm, mm);
 	/*
@@ -765,8 +771,12 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 			i_mmap_unlock_write(mapping);
 		}
 
-		if (!(tmp->vm_flags & VM_WIPEONFORK))
-			retval = copy_page_range(tmp, mpnt);
+		if (!(tmp->vm_flags & VM_WIPEONFORK)) {
+			if (async_fork)
+				retval = async_fork_cpr_fast(tmp, mpnt);
+			else
+				retval = copy_page_range(tmp, mpnt);
+		}
 
 		if (retval) {
 			mpnt = vma_next(&vmi);
@@ -806,6 +816,16 @@ loop_out:
 out:
 	mmap_write_unlock(mm);
 	flush_tlb_mm(oldmm);
+#ifdef CONFIG_ASYNC_FORK
+	/*
+	 * If dup_mmap gets failure, async_fork_cpr_bind()
+	 * will reset mm->async_fork_mm and recover parent's
+	 * page table.
+	 * Parent's mmap write lock is hold
+	 */
+	if (async_fork)
+		async_fork_cpr_bind(oldmm, mm, retval);
+#endif
 	mmap_write_unlock(oldmm);
 	if (!retval)
 		dup_userfaultfd_complete(&uf);
@@ -949,6 +969,9 @@ void __mmdrop(struct mm_struct *mm)
 	cleanup_lazy_tlbs(mm);
 
 	WARN_ON_ONCE(mm == current->active_mm);
+#ifdef CONFIG_ASYNC_FORK
+	BUG_ON(mm->async_fork_mm);
+#endif
 	mm_free_pgd(mm);
 	destroy_context(mm);
 	mmu_notifier_subscriptions_destroy(mm);
@@ -1325,6 +1348,11 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 #endif
 	mm_init_uprobes_state(mm);
 	hugetlb_count_init(mm);
+
+#ifdef CONFIG_ASYNC_FORK
+	mm->async_fork_mm = NULL;
+	mm->async_fork_flags = 0;
+#endif
 
 	if (current->mm) {
 		mm->flags = mmf_init_flags(current->mm->flags);
@@ -2799,6 +2827,21 @@ bad_fork_cleanup_namespaces:
 	exit_task_namespaces(p);
 bad_fork_cleanup_mm:
 	if (p->mm) {
+#ifdef CONFIG_ASYNC_FORK
+		/*
+		 * It could be possible if async_fork_cpr_rest() in child of
+		 * first fork(2) has not done while parent is doing a new fork
+		 * with CLONE_VM. Since new fork with CLONE_VM skipped
+		 * dup_mm() (see copy_mm()), fixup vma is skipped as well.
+		 * Hence if reaches here, p->mm->async_fork_mm points to former
+		 * child's mm which could be set NULL when it has done page
+		 * table copy, this is a race which can cause NULL pointer
+		 * panic
+		 */
+		if (p->mm->async_fork_mm &&
+		    !WARN_ON_ONCE(clone_flags & CLONE_VM))
+			async_fork_cpr_done(p->mm, true, false);
+#endif
 		mm_clear_owner(p->mm, p);
 		mmput(p->mm);
 	}

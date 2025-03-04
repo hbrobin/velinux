@@ -4506,6 +4506,25 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 	return 0;
 }
 
+#ifdef CONFIG_ASYNC_FORK
+static u64 mem_cgroup_async_fork_read(struct cgroup_subsys_state *css,
+					struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg->async_fork;
+}
+
+static int mem_cgroup_async_fork_write(struct cgroup_subsys_state *css,
+					 struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	memcg->async_fork = val;
+	return 0;
+}
+#endif
+
 static void __mem_cgroup_threshold(struct mem_cgroup *memcg, bool swap)
 {
 	struct mem_cgroup_threshold_ary *t;
@@ -5510,6 +5529,13 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
 	},
+#ifdef CONFIG_ASYNC_FORK
+	{
+		.name = "async_fork",
+		.read_u64 = mem_cgroup_async_fork_read,
+		.write_u64 = mem_cgroup_async_fork_write,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -5778,6 +5804,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
 
 		memcg->oom_priority = READ_ONCE(parent->oom_priority);
+#ifdef CONFIG_ASYNC_FORK
+		memcg->async_fork = parent->async_fork;
+#endif
 		page_counter_init(&memcg->memory, &parent->memory);
 		page_counter_init(&memcg->swap, &parent->swap);
 		page_counter_init(&memcg->kmem, &parent->kmem);
@@ -7458,6 +7487,13 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT | CFTYPE_NS_DELEGATABLE,
 		.seq_show = memory_dirty_bg_thresh_show,
 		.write = memory_dirty_bg_thresh_write,
+	},
+#endif
+#ifdef CONFIG_ASYNC_FORK
+	{
+		.name = "async_fork",
+		.read_u64 = mem_cgroup_async_fork_read,
+		.write_u64 = mem_cgroup_async_fork_write,
 	},
 #endif
 	{ }	/* terminate */
