@@ -714,6 +714,10 @@ struct vm_area_struct {
 	struct vma_numab_state *numab_state;	/* NUMA Balancing state */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
+#ifdef CONFIG_ASYNC_FORK
+	/* Pairing vma */
+	struct vm_area_struct *async_fork_vma;
+#endif
 } __randomize_layout;
 
 #ifdef CONFIG_SCHED_MM_CID
@@ -971,6 +975,12 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN */
+#ifdef CONFIG_ASYNC_FORK
+		/* Pairing mm_struct ptr and its flags */
+		struct mm_struct *async_fork_mm;
+		unsigned long async_fork_flags;
+		atomic_t async_fork_refcnt;
+#endif
 	} __randomize_layout;
 
 	/*
@@ -1433,4 +1443,11 @@ enum cpr_mode {
 	CPR_SLOW,
 	CPR_MAX_MODE,
 };
+
+#ifdef CONFIG_ASYNC_FORK
+#define ASYNC_FORK_PARENT		1
+#define ASYNC_FORK_CHILD		2
+#define VMA_FAST_COPIED		((void *)(1UL))
+#endif
+
 #endif /* _LINUX_MM_TYPES_H */
