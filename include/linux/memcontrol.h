@@ -2000,6 +2000,8 @@ static inline void count_objcg_event(struct obj_cgroup *objcg,
 	rcu_read_unlock();
 }
 
+bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid);
+
 #else
 static inline bool mem_cgroup_kmem_disabled(void)
 {
@@ -2059,6 +2061,11 @@ static inline struct mem_cgroup *mem_cgroup_from_slab_obj(void *p)
 static inline void count_objcg_event(struct obj_cgroup *objcg,
 				     enum vm_event_item idx)
 {
+}
+
+static inline bool mem_cgroup_node_allowed(struct mem_cgroup *memcg, int nid)
+{
+	return true;
 }
 
 #endif /* CONFIG_MEMCG_KMEM */
