@@ -200,8 +200,11 @@ static int erofs_init_device(struct erofs_buf *buf, struct super_block *sb,
 		} else {
 			bdev_handle = bdev_open_by_path(dif->path, BLK_OPEN_READ,
 					sb->s_type, NULL);
-			if (IS_ERR(bdev_handle))
+			if (IS_ERR(bdev_handle)) {
+				if (bdev_handle == ERR_PTR(-ENOTBLK))
+					return -EINVAL;
 				return PTR_ERR(bdev_handle);
+			}
 			dif->bdev_handle = bdev_handle;
 			dif->dax_dev = fs_dax_get_by_bdev(bdev_handle->bdev,
 					&dif->dax_part_off, NULL, NULL);
