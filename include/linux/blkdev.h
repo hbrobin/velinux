@@ -1094,13 +1094,13 @@ enum blk_default_limits {
 };
 
 /*
- * Default upper limit for the software max_sectors limit used for
- * regular file system I/O.  This can be increased through sysfs.
+ * Default upper limit for the software max_sectors limit used for regular I/Os.
+ * This can be increased through sysfs.
  *
- * Not to be confused with the max_hw_sector limit that is entirely
- * controlled by the driver, usually based on hardware limits.
+ * This should not be confused with the max_hw_sector limit that is entirely
+ * controlled by the block device driver, usually based on hardware limits.
  */
-#define BLK_DEF_MAX_SECTORS_CAP	2560u
+#define BLK_DEF_MAX_SECTORS_CAP	(SZ_4M >> SECTOR_SHIFT)
 
 static inline unsigned long queue_segment_boundary(const struct request_queue *q)
 {
