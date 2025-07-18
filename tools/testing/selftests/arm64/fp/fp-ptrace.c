@@ -1096,6 +1096,9 @@ static bool sve_write_supported(struct test_config *config)
 		if (config->sme_vl_in != config->sme_vl_expected) {
 			return false;
 		}
+
+		if (!sve_supported())
+			return false;
 	}
 
 	return true;
