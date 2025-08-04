@@ -314,7 +314,7 @@ static int init_acpi(struct device *dev)
 			dev_err(dev, "Failed to init metric table\n");
 	}
 
-	return ret;
+	return 0;
 }
 
 static struct bin_attribute  hsmp_metric_tbl_attr = {
