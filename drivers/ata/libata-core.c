@@ -3134,6 +3134,10 @@ int ata_dev_configure(struct ata_device *dev)
 		dev->max_sectors = min_t(unsigned int, ATA_MAX_SECTORS_1024,
 					 dev->max_sectors);
 
+	if (dev->horkage & ATA_HORKAGE_MAX_SEC_8191)
+		dev->max_sectors = min_t(unsigned int, ATA_MAX_SECTORS_8191,
+					 dev->max_sectors);
+
 	if (dev->horkage & ATA_HORKAGE_MAX_SEC_LBA48)
 		dev->max_sectors = ATA_MAX_SECTORS_LBA48;
 
@@ -4128,6 +4132,12 @@ static const struct ata_blacklist_entry ata_device_blacklist [] = {
 	 */
 	{ "LITEON CX1-JB*-HP",	NULL,		ATA_HORKAGE_MAX_SEC_1024 },
 	{ "LITEON EP1-*",	NULL,		ATA_HORKAGE_MAX_SEC_1024 },
+
+	/*
+	 * These devices time out with higher max sects.
+	 * https://bugzilla.kernel.org/show_bug.cgi?id=220693
+	 */
+	{ "DELLBOSS VD",	"MV.R00-0",	ATA_HORKAGE_MAX_SEC_8191 },
 
 	/* Devices we expect to fail diagnostics */
 

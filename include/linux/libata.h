@@ -372,6 +372,7 @@ enum {
 	ATA_HORKAGE_BROKEN_HPA	= (1 << 4),	/* Broken HPA */
 	ATA_HORKAGE_DISABLE	= (1 << 5),	/* Disable it */
 	ATA_HORKAGE_HPA_SIZE	= (1 << 6),	/* native size off by one */
+	ATA_HORKAGE_MAX_SEC_8191	= (1 << 7),	/* Limit max sects to 8191 */
 	ATA_HORKAGE_IVB		= (1 << 8),	/* cbl det validity bit bugs */
 	ATA_HORKAGE_STUCK_ERR	= (1 << 9),	/* stuck ERR on next PACKET */
 	ATA_HORKAGE_BRIDGE_OK	= (1 << 10),	/* no bridge limits */
