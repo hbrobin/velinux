@@ -4309,6 +4309,8 @@ static const struct ata_blacklist_entry ata_device_blacklist [] = {
 
 	{ "Micron*",			NULL,	ATA_HORKAGE_ZERO_AFTER_TRIM },
 	{ "Crucial*",			NULL,	ATA_HORKAGE_ZERO_AFTER_TRIM },
+	{ "INTEL SSDSC2KG480G8", "XCV10120",	ATA_HORKAGE_ZERO_AFTER_TRIM |
+						ATA_HORKAGE_MAX_SEC_8191 },
 	{ "INTEL*SSD*", 		NULL,	ATA_HORKAGE_ZERO_AFTER_TRIM },
 	{ "SSD*INTEL*",			NULL,	ATA_HORKAGE_ZERO_AFTER_TRIM },
 	{ "Samsung*SSD*",		NULL,	ATA_HORKAGE_ZERO_AFTER_TRIM },
