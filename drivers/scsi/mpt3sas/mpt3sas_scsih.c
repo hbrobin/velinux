@@ -2653,6 +2653,8 @@ scsih_slave_configure(struct scsi_device *sdev)
 
 	/* PCIe handling */
 	if (sas_target_priv_data->flags & MPT_TARGET_FLAGS_PCIE_DEVICE) {
+		unsigned int max_hw_sectors;
+
 		spin_lock_irqsave(&ioc->pcie_device_lock, flags);
 		pcie_device = __mpt3sas_get_pdev_by_wwid(ioc,
 				sas_device_priv_data->sas_target->sas_address);
@@ -2683,9 +2685,21 @@ scsih_slave_configure(struct scsi_device *sdev)
 				pcie_device->enclosure_level,
 				pcie_device->connector_name);
 
+		/*
+		 * The HBA firmware passes the NVMe drive's MDTS
+		 * (Maximum Data Transfer Size) up to the driver. However,
+		 * the driver hardcodes a 4K buffer size for the PRP list,
+		 * accommodating at most 512 entries. This strictly limits
+		 * the maximum supported NVMe I/O transfer to 2 MiB.
+		 *
+		 * Cap max_hw_sectors to the smaller of the drive's reported
+		 * MDTS or the 2 MiB driver limit to prevent kernel oopses.
+		 */
+		max_hw_sectors = SZ_2M >> SECTOR_SHIFT;
 		if (pcie_device->nvme_mdts)
-			blk_queue_max_hw_sectors(sdev->request_queue,
-					pcie_device->nvme_mdts/512);
+			max_hw_sectors = min(max_hw_sectors,
+					pcie_device->nvme_mdts >> SECTOR_SHIFT);
+		blk_queue_max_hw_sectors(sdev->request_queue, max_hw_sectors);
 
 		pcie_device_put(pcie_device);
 		spin_unlock_irqrestore(&ioc->pcie_device_lock, flags);
