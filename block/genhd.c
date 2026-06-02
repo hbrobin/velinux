@@ -1095,6 +1095,33 @@ static struct device_attribute dev_attr_fail_timeout =
 	__ATTR(io-timeout-fail, 0644, part_timeout_show, part_timeout_store);
 #endif
 
+ssize_t bh_read_failfast_sec_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%lu\n", bdev_bh_read_failfast_sec(dev_to_bdev(dev)));
+}
+
+ssize_t bh_read_failfast_sec_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	unsigned long sec;
+	int ret;
+
+	ret = kstrtoul(buf, 0, &sec);
+	if (ret)
+		return ret;
+	if (sec > MAX_JIFFY_OFFSET / HZ)
+		return -ERANGE;
+
+	bdev_set_bh_read_failfast_sec(dev_to_bdev(dev), sec);
+	return count;
+}
+
+static struct device_attribute dev_attr_bh_read_failfast_sec =
+	__ATTR(bh_read_failfast_sec, 0644,
+	       bh_read_failfast_sec_show, bh_read_failfast_sec_store);
+
 static struct attribute *disk_attrs[] = {
 	&dev_attr_range.attr,
 	&dev_attr_ext_range.attr,
@@ -1119,6 +1146,7 @@ static struct attribute *disk_attrs[] = {
 #ifdef CONFIG_FAIL_IO_TIMEOUT
 	&dev_attr_fail_timeout.attr,
 #endif
+	&dev_attr_bh_read_failfast_sec.attr,
 	NULL
 };
 
@@ -1198,6 +1226,7 @@ static void disk_release(struct device *dev)
 	if (test_bit(GD_ADDED, &disk->state) && disk->fops->free_disk)
 		disk->fops->free_disk(disk);
 
+	bdev_clear_bh_read_failfast_sec(disk->part0);
 	iput(disk->part0->bd_inode);	/* frees the disk */
 }
 

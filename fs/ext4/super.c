@@ -159,6 +159,7 @@ MODULE_ALIAS_FS("ext3");
 MODULE_ALIAS("ext3");
 #define IS_EXT3_SB(sb) ((sb)->s_type == &ext3_fs_type)
 
+#define EXT4_BH_FAILFAST_SEC	5
 
 static inline void __ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 				  bh_end_io_t *end_io, bool simu_fail)
@@ -1394,6 +1395,8 @@ static void ext4_put_super(struct super_block *sb)
 	ext4_stop_mmpd(sbi);
 
 	brelse(sbi->s_sbh);
+	if (!IS_EXT2_SB(sb) && !IS_EXT3_SB(sb))
+		bdev_clear_bh_read_failfast_sec(sb->s_bdev);
 	sb->s_fs_info = NULL;
 	/*
 	 * Now that we are completely done shutting down the
@@ -5737,6 +5740,8 @@ failed_mount:
 	}
 out_fail:
 	invalidate_bdev(sb->s_bdev);
+	if (!IS_EXT2_SB(sb) && !IS_EXT3_SB(sb))
+		bdev_clear_bh_read_failfast_sec(sb->s_bdev);
 	sb->s_fs_info = NULL;
 	return err;
 }
@@ -5753,6 +5758,8 @@ static int ext4_fill_super(struct super_block *sb, struct fs_context *fc)
 		return -ENOMEM;
 
 	fc->s_fs_info = sbi;
+	if (!IS_EXT2_SB(sb) && !IS_EXT3_SB(sb))
+		bdev_set_bh_read_failfast_sec(sb->s_bdev, EXT4_BH_FAILFAST_SEC);
 
 	/* Cleanup superblock name */
 	strreplace(sb->s_id, '/', '!');

@@ -1014,6 +1014,7 @@ static sector_t folio_init_buffers(struct folio *folio,
 			bh->b_private = NULL;
 			bh->b_bdev = bdev;
 			bh->b_blocknr = block;
+			bh_read_err_clear(bh);
 			if (uptodate)
 				set_buffer_uptodate(bh);
 			if (block < end_block)
@@ -1570,6 +1571,7 @@ static void discard_buffer(struct buffer_head * bh)
 
 	lock_buffer(bh);
 	clear_buffer_dirty(bh);
+	bh_read_err_clear(bh);
 	bh->b_bdev = NULL;
 	b_state = READ_ONCE(bh->b_state);
 	do {
@@ -2084,6 +2086,7 @@ iomap_to_bh(struct inode *inode, sector_t block, struct buffer_head *bh,
 		bh->b_blocknr = (iomap->addr + offset - iomap->offset) >>
 				inode->i_blkbits;
 		set_buffer_mapped(bh);
+		bh_read_err_clear(bh);
 		return 0;
 	default:
 		WARN_ON_ONCE(1);
@@ -2782,6 +2785,30 @@ sector_t generic_block_bmap(struct address_space *mapping, sector_t block,
 }
 EXPORT_SYMBOL(generic_block_bmap);
 
+static void bh_update_read_error_state(struct buffer_head *bh, const struct bio *bio)
+{
+	const enum req_op op = bio_op(bio);
+
+	if (op != REQ_OP_READ && op != REQ_OP_WRITE)
+		return;
+
+	if (!bio->bi_status) {
+		/* A successful read or write clears the read I/O error state. */
+		bh_read_err_clear(bh);
+		return;
+	}
+
+	if (op != REQ_OP_READ)
+		return;
+	if (bio->bi_opf & REQ_RAHEAD)
+		return;
+	if (!bdev_bh_read_failfast_sec(bh->b_bdev))
+		return;
+
+	/* Record the first non-readahead failure; don't extend the window. */
+	bh_read_err_record(bh);
+}
+
 static void end_bio_bh_io_sync(struct bio *bio)
 {
 	struct buffer_head *bh = bio->bi_private;
@@ -2789,8 +2816,31 @@ static void end_bio_bh_io_sync(struct bio *bio)
 	if (unlikely(bio_flagged(bio, BIO_QUIET)))
 		set_bit(BH_Quiet, &bh->b_state);
 
+	bh_update_read_error_state(bh, bio);
+
 	bh->b_end_io(bh, !bio->bi_status);
 	bio_put(bio);
+}
+
+static bool bh_failfast_read(struct buffer_head *bh)
+{
+	unsigned long retry_sec = bdev_bh_read_failfast_sec(bh->b_bdev);
+	u64 err_time;
+	u64 now;
+
+	if (!retry_sec || !buffer_read_io_error(bh))
+		return false;
+
+	now = get_jiffies_64();
+	err_time = READ_ONCE(bh->b_read_err_time);
+	if (now - err_time < (u64)retry_sec * HZ) {
+		set_buffer_req(bh);
+		bh->b_end_io(bh, 0);
+		return true;
+	}
+
+	bh_read_err_clear(bh);
+	return false;
 }
 
 static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
@@ -2804,6 +2854,14 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 	BUG_ON(!bh->b_end_io);
 	BUG_ON(buffer_delay(bh));
 	BUG_ON(buffer_unwritten(bh));
+
+	/*
+	 * Fail fast for repeated buffer_head reads after a recent non-readahead
+	 * I/O error. This avoids serializing many callers on BH_Lock while
+	 * re-submitting the same failing read.
+	 */
+	if (op == REQ_OP_READ && !(opf & REQ_RAHEAD) && bh_failfast_read(bh))
+		return;
 
 	/*
 	 * Only clear out a write error when rewriting
@@ -3052,6 +3110,7 @@ EXPORT_SYMBOL(alloc_buffer_head);
 void free_buffer_head(struct buffer_head *bh)
 {
 	BUG_ON(!list_empty(&bh->b_assoc_buffers));
+	bh_read_err_clear(bh);
 	kmem_cache_free(bh_cachep, bh);
 	preempt_disable();
 	__this_cpu_dec(bh_accounting.nr);

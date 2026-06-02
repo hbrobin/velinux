@@ -44,6 +44,8 @@ struct block_device {
 	struct request_queue *	bd_queue;
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
+	/* Seconds; 0 disables buffer_head read fail-fast. */
+	unsigned long		bd_bh_read_failfast_sec;
 	bool			bd_read_only;	/* read-only policy */
 	u8			bd_partno;
 	bool			bd_write_holder;
@@ -85,6 +87,24 @@ struct block_device {
 
 #define bdev_kobj(_bdev) \
 	(&((_bdev)->bd_device.kobj))
+
+static inline unsigned long
+bdev_bh_read_failfast_sec(struct block_device *bdev)
+{
+	return READ_ONCE(bdev->bd_bh_read_failfast_sec);
+}
+
+static inline void
+bdev_set_bh_read_failfast_sec(struct block_device *bdev, unsigned long sec)
+{
+	WRITE_ONCE(bdev->bd_bh_read_failfast_sec, sec);
+}
+
+static inline void
+bdev_clear_bh_read_failfast_sec(struct block_device *bdev)
+{
+	WRITE_ONCE(bdev->bd_bh_read_failfast_sec, 0);
+}
 
 /*
  * Block error status values.  See block/blk-core:blk_errors for the details.

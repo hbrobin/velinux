@@ -313,6 +313,10 @@ ssize_t part_fail_store(struct device *dev, struct device_attribute *attr,
 ssize_t part_timeout_show(struct device *, struct device_attribute *, char *);
 ssize_t part_timeout_store(struct device *, struct device_attribute *,
 				const char *, size_t);
+ssize_t bh_read_failfast_sec_show(struct device *dev, struct device_attribute *attr,
+		char *buf);
+ssize_t bh_read_failfast_sec_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count);
 
 static inline bool bio_may_exceed_limits(struct bio *bio,
 					 const struct queue_limits *lim)

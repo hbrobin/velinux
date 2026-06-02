@@ -34,6 +34,7 @@ enum bh_state_bits {
 	BH_Meta,	/* Buffer contains metadata */
 	BH_Prio,	/* Buffer should be submitted with REQ_PRIO */
 	BH_Defer_Completion, /* Defer AIO completion to workqueue */
+	BH_Read_EIO,	/* I/O error on read */
 
 	BH_PrivateStart,/* not a state bit, but the first bit available
 			 * for private allocation by other entities
@@ -78,6 +79,7 @@ struct buffer_head {
 	spinlock_t b_uptodate_lock;	/* Used by the first bh in a page, to
 					 * serialise IO completion of other
 					 * buffers in the page */
+	u64 b_read_err_time;		/* first failed read time */
 };
 
 /*
@@ -131,10 +133,29 @@ BUFFER_FNS(Async_Write, async_write)
 BUFFER_FNS(Delay, delay)
 BUFFER_FNS(Boundary, boundary)
 BUFFER_FNS(Write_EIO, write_io_error)
+BUFFER_FNS(Read_EIO, read_io_error)
 BUFFER_FNS(Unwritten, unwritten)
 BUFFER_FNS(Meta, meta)
 BUFFER_FNS(Prio, prio)
 BUFFER_FNS(Defer_Completion, defer_completion)
+
+static __always_inline void bh_read_err_clear(struct buffer_head *bh)
+{
+	if (likely(!buffer_read_io_error(bh)))
+		return;
+
+	clear_buffer_read_io_error(bh);
+	WRITE_ONCE(bh->b_read_err_time, 0);
+}
+
+static __always_inline void bh_read_err_record(struct buffer_head *bh)
+{
+	if (buffer_read_io_error(bh))
+		return;
+
+	WRITE_ONCE(bh->b_read_err_time, get_jiffies_64());
+	set_buffer_read_io_error(bh);
+}
 
 static __always_inline void set_buffer_uptodate(struct buffer_head *bh)
 {
@@ -385,6 +406,7 @@ map_bh(struct buffer_head *bh, struct super_block *sb, sector_t block)
 	bh->b_bdev = sb->s_bdev;
 	bh->b_blocknr = block;
 	bh->b_size = sb->s_blocksize;
+	bh_read_err_clear(bh);
 }
 
 static inline void wait_on_buffer(struct buffer_head *bh)

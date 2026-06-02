@@ -212,6 +212,9 @@ static DEVICE_ATTR(inflight, 0444, part_inflight_show, NULL);
 static struct device_attribute dev_attr_fail =
 	__ATTR(make-it-fail, 0644, part_fail_show, part_fail_store);
 #endif
+static struct device_attribute dev_attr_bh_read_failfast_sec =
+	__ATTR(bh_read_failfast_sec, 0644,
+	       bh_read_failfast_sec_show, bh_read_failfast_sec_store);
 
 static struct attribute *part_attrs[] = {
 	&dev_attr_partition.attr,
@@ -225,6 +228,7 @@ static struct attribute *part_attrs[] = {
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
+	&dev_attr_bh_read_failfast_sec.attr,
 	NULL
 };
 
@@ -242,6 +246,7 @@ static const struct attribute_group *part_attr_groups[] = {
 
 static void part_release(struct device *dev)
 {
+	bdev_clear_bh_read_failfast_sec(dev_to_bdev(dev));
 	put_disk(dev_to_bdev(dev)->bd_disk);
 	iput(dev_to_bdev(dev)->bd_inode);
 }
