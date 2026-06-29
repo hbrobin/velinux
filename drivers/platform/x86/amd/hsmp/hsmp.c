@@ -199,6 +199,13 @@ int hsmp_send_message(struct hsmp_message *msg)
 	sock = &hsmp_pdev.sock[msg->sock_ind];
 
 	/*
+	 * Reject slots which have not completed probe or have been removed.
+	 * Pairs with smp_store_release() in hsmp_parse_acpi_table().
+	 */
+	if (!smp_load_acquire(&sock->dev))
+		return -ENODEV;
+
+	/*
 	 * The time taken by smu operation to complete is between
 	 * 10us to 1ms. Sometime it may take more time.
 	 * In SMP system timeout of 100 millisecs should
