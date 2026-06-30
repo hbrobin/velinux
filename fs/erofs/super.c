@@ -592,12 +592,9 @@ static void erofs_set_sysfs_name(struct super_block *sb)
 
 	if (sbi->domain_id)
 		super_set_sysfs_name_generic(sb, "%s,%s", sbi->domain_id,
-					     sbi->fsid);
+				     sbi->fsid);
 	else if (sbi->fsid)
 		super_set_sysfs_name_generic(sb, "%s", sbi->fsid);
-	else if (erofs_is_fileio_mode(sbi))
-		super_set_sysfs_name_generic(sb, "%s",
-					     bdi_dev_name(sb->s_bdi));
 	else
 		super_set_sysfs_name_id(sb);
 }
@@ -649,6 +646,10 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 		err = super_setup_bdi(sb);
 		if (err)
 			return err;
+
+		if (erofs_is_fileio_mode(sbi))
+			snprintf(sb->s_id, sizeof(sb->s_id), "%u:%u",
+				 MAJOR(sb->s_dev), MINOR(sb->s_dev));
 	} else {
 		if (!sb_set_blocksize(sb, PAGE_SIZE)) {
 			errorfc(fc, "failed to set initial blksize");
