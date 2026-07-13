@@ -533,10 +533,8 @@ static struct thpsize *thpsize_create(int order, struct kobject *parent)
 
 	ret = kobject_init_and_add(&thpsize->kobj, &thpsize_ktype, parent,
 				   "hugepages-%lukB", size);
-	if (ret) {
-		kfree(thpsize);
-		return ERR_PTR(ret);
-	}
+	if (ret)
+		goto err_put;
 
 	ret = sysfs_create_group(&thpsize->kobj, &thpsize_attr_group);
 	if (ret) {
@@ -546,6 +544,9 @@ static struct thpsize *thpsize_create(int order, struct kobject *parent)
 
 	thpsize->order = order;
 	return thpsize;
+err_put:
+	kobject_put(&thpsize->kobj);
+	return ERR_PTR(ret);
 }
 
 static void thpsize_release(struct kobject *kobj)
