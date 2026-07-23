@@ -67,6 +67,9 @@ void hsmp_init_metric_read_locks(struct hsmp_plat_device *pdev);
 void hsmp_destroy_metric_read_locks(struct hsmp_plat_device *pdev);
 ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size);
 struct hsmp_plat_device *get_hsmp_pdev(void);
-/* Probe and remove serialize socket bring-up and teardown. */
+/*
+ * Gates the HSMP data plane: hsmp_send_message() takes it for read; probe and
+ * remove take it for write to bring sockets up and tear them down.
+ */
 extern struct rw_semaphore hsmp_sock_rwsem;
 #endif /* HSMP_H */

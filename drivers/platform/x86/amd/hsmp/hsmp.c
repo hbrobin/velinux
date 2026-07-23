@@ -47,9 +47,12 @@
 static struct hsmp_plat_device hsmp_pdev;
 
 /*
- * Serializes AMD HSMP socket bring-up and teardown: ACPI probe and remove take
- * it for write so concurrent per-socket probes cannot race the is_probed
- * handshake or the one-time socket-array allocation.
+ * Gates the AMD HSMP data plane against socket bring-up and teardown.
+ *
+ * hsmp_send_message() takes it for read, so open /dev/hsmp fds and hwmon reads
+ * run concurrently. Probe and remove take it for write: probe brings sockets
+ * up (running the mailbox handshake via hsmp_send_message_locked()) and remove
+ * tears them down, both excluding and draining the data plane.
  */
 DECLARE_RWSEM(hsmp_sock_rwsem);
 EXPORT_SYMBOL_NS_GPL(hsmp_sock_rwsem, AMD_HSMP);
@@ -195,10 +198,18 @@ static int validate_message(struct hsmp_message *msg)
 	return 0;
 }
 
-int hsmp_send_message(struct hsmp_message *msg)
+/*
+ * Core message send. The caller must hold hsmp_sock_rwsem: the data plane
+ * takes it for read so many messages run concurrently, while the probe-time
+ * senders run under the write lock taken by probe. Holding it here serializes
+ * every message against socket teardown, which also holds it for write.
+ */
+static int hsmp_send_message_locked(struct hsmp_message *msg)
 {
 	struct hsmp_socket *sock;
 	int ret;
+
+	lockdep_assert_held(&hsmp_sock_rwsem);
 
 	if (!msg)
 		return -EINVAL;
@@ -211,7 +222,8 @@ int hsmp_send_message(struct hsmp_message *msg)
 	sock = &hsmp_pdev.sock[msg->sock_ind];
 
 	/*
-	 * Reject slots which have not completed probe or have been removed.
+	 * Held under hsmp_sock_rwsem. Reject slots which have not completed
+	 * probe or have been removed.
 	 * Pairs with smp_store_release() in hsmp_parse_acpi_table().
 	 */
 	if (!smp_load_acquire(&sock->dev))
@@ -233,6 +245,19 @@ int hsmp_send_message(struct hsmp_message *msg)
 
 	return ret;
 }
+
+int hsmp_send_message(struct hsmp_message *msg)
+{
+	/*
+	 * Data-plane entry point: open /dev/hsmp fds and hwmon sysfs reads issue
+	 * messages from here. Take hsmp_sock_rwsem for read so messages run
+	 * concurrently with each other but are drained and kept out while
+	 * probe/remove hold it for write to tear a socket down.
+	 */
+	guard(rwsem_read)(&hsmp_sock_rwsem);
+
+	return hsmp_send_message_locked(msg);
+}
 EXPORT_SYMBOL_NS_GPL(hsmp_send_message, AMD_HSMP);
 
 int hsmp_test(u16 sock_ind, u32 value)
@@ -250,7 +275,7 @@ int hsmp_test(u16 sock_ind, u32 value)
 	msg.args[0]	= value;
 	msg.sock_ind	= sock_ind;
 
-	ret = hsmp_send_message(&msg);
+	ret = hsmp_send_message_locked(&msg);
 	if (ret)
 		return ret;
 
@@ -426,7 +451,7 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 	msg.response_sz	= hsmp_msg_desc_table[HSMP_GET_METRIC_TABLE_DRAM_ADDR].response_sz;
 	msg.msg_id	= HSMP_GET_METRIC_TABLE_DRAM_ADDR;
 
-	ret = hsmp_send_message(&msg);
+	ret = hsmp_send_message_locked(&msg);
 	if (ret)
 		return ret;
 
@@ -457,7 +482,7 @@ int hsmp_cache_proto_ver(u16 sock_ind)
 	msg.sock_ind	= sock_ind;
 	msg.response_sz = hsmp_msg_desc_table[HSMP_GET_PROTO_VER].response_sz;
 
-	ret = hsmp_send_message(&msg);
+	ret = hsmp_send_message_locked(&msg);
 	if (!ret)
 		hsmp_pdev.proto_ver = msg.args[0];
 
