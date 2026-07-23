@@ -12,12 +12,15 @@
 #include <asm/amd_hsmp.h>
 
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/ioport.h>
 #include <linux/kstrtox.h>
+#include <linux/lockdep.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/rwsem.h>
 #include <linux/sysfs.h>
 #include <linux/uuid.h>
 
@@ -263,6 +266,8 @@ static int init_acpi(struct device *dev)
 	u16 sock_ind;
 	int ret;
 
+	lockdep_assert_held_write(&hsmp_sock_rwsem);
+
 	ret = hsmp_get_uid(dev, &sock_ind);
 	if (ret)
 		return ret;
@@ -334,6 +339,14 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 	if (!hsmp_pdev)
 		return -ENOMEM;
 
+	/*
+	 * Multiple ACPI socket devices probe in parallel, but the is_probed
+	 * handshake and the one-time socket-array allocation below must run
+	 * exactly once.  Serialize the whole bring-up against concurrent
+	 * probe/remove by holding the socket rwsem for write.
+	 */
+	guard(rwsem_write)(&hsmp_sock_rwsem);
+
 	if (!hsmp_pdev->is_probed) {
 		hsmp_pdev->num_sockets = amd_num_nodes();
 		if (hsmp_pdev->num_sockets == 0 || hsmp_pdev->num_sockets > MAX_AMD_NUM_NODES) {
@@ -369,6 +382,8 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 static int hsmp_acpi_remove(struct platform_device *pdev)
 {
+	guard(rwsem_write)(&hsmp_sock_rwsem);
+
 	/*
 	 * We register only one misc_device even on multi-socket system.
 	 * So, deregister should happen only once.

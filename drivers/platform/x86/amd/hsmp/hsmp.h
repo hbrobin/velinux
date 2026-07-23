@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/pci.h>
+#include <linux/rwsem.h>
 #include <linux/semaphore.h>
 #include <linux/sysfs.h>
 
@@ -61,4 +62,6 @@ int hsmp_misc_register(struct device *dev);
 int hsmp_get_tbl_dram_base(u16 sock_ind);
 ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size);
 struct hsmp_plat_device *get_hsmp_pdev(void);
+/* Probe and remove serialize socket bring-up and teardown. */
+extern struct rw_semaphore hsmp_sock_rwsem;
 #endif /* HSMP_H */
