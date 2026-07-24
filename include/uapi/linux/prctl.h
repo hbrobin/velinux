@@ -306,4 +306,6 @@ struct prctl_mm_map {
 # define PR_RISCV_V_VSTATE_CTRL_NEXT_MASK	0xc
 # define PR_RISCV_V_VSTATE_CTRL_MASK		0x1f
 
+#define PR_SET_ASYNC_FORK_ENABLE	0x4000 /* async-fork option */
+
 #endif /* _LINUX_PRCTL_H */

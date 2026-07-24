@@ -1690,10 +1690,28 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 #endif /* CONFIG_MEMCG */
 
 #ifdef CONFIG_ASYNC_FORK
+
+extern int async_fork_enabled;
+
 static inline unsigned long task_async_fork(struct task_struct *p)
 {
+	struct mm_struct *mm = READ_ONCE(p->mm);
 	struct mem_cgroup *task_memcg;
+	int global_enabled;
 	unsigned long async_fork = 0UL;
+
+	if (!mm)
+		return 0UL;
+
+	global_enabled = READ_ONCE(async_fork_enabled);
+	if (!global_enabled)
+		return 0UL;
+
+	if (global_enabled == 2)
+		return 1UL;
+
+	if (READ_ONCE(mm->async_fork_enabled))
+		return 1UL;
 
 	if (mem_cgroup_disabled())
 		return 0UL;
@@ -1701,7 +1719,7 @@ static inline unsigned long task_async_fork(struct task_struct *p)
 	rcu_read_lock();
 	task_memcg = mem_cgroup_from_task(p);
 	if (task_memcg)
-		async_fork = task_memcg->async_fork;
+		async_fork = READ_ONCE(task_memcg->async_fork);
 	rcu_read_unlock();
 
 	return async_fork;

@@ -2733,6 +2733,11 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_GET_MDWE:
 		error = prctl_get_mdwe(arg2, arg3, arg4, arg5);
 		break;
+#ifdef CONFIG_ASYNC_FORK
+	case PR_SET_ASYNC_FORK_ENABLE:
+		WRITE_ONCE(me->mm->async_fork_enabled, !!arg2);
+		break;
+#endif
 	case PR_SET_VMA:
 		error = prctl_set_vma(arg2, arg3, arg4, arg5);
 		break;

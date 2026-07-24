@@ -12,12 +12,43 @@
 #include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
+#include <linux/sysctl.h>
 #include <linux/userfaultfd_k.h>
 
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 
 #include "internal.h"
+
+/*
+ * 0: globally disable async-fork.
+ * 1: controlled by per-mm prctl flag or memcg async_fork[_enabled].
+ * 2: globally enable async-fork.
+ */
+int __read_mostly async_fork_enabled = 1;
+
+#ifdef CONFIG_PROC_SYSCTL
+static int two = 2;
+static struct ctl_table async_fork_table[] = {
+	{
+		.procname	= "async_fork_enabled",
+		.data		= &async_fork_enabled,
+		.maxlen		= sizeof(async_fork_enabled),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &two,
+	},
+	{ }
+};
+
+static int __init async_fork_sysctls_init(void)
+{
+	register_sysctl_init("kernel", async_fork_table);
+	return 0;
+}
+late_initcall(async_fork_sysctls_init);
+#endif
 
 static inline void recover_pmd_range(pud_t *src_pud, unsigned long addr,
 				     unsigned long end,

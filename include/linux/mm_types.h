@@ -979,6 +979,7 @@ struct mm_struct {
 		/* Pairing mm_struct ptr and its flags */
 		struct mm_struct *async_fork_mm;
 		unsigned long async_fork_flags;
+		bool async_fork_enabled;
 		atomic_t async_fork_refcnt;
 #endif
 	} __randomize_layout;

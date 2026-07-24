@@ -1352,6 +1352,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 #ifdef CONFIG_ASYNC_FORK
 	mm->async_fork_mm = NULL;
 	mm->async_fork_flags = 0;
+	mm->async_fork_enabled = false;
 #endif
 
 	if (current->mm) {
