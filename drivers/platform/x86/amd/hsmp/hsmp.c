@@ -36,7 +36,6 @@
 #define HSMP_WR			true
 #define HSMP_RD			false
 
-#define DRIVER_VERSION		"2.4"
 
 /*
  * When same message numbers are used for both GET and SET operation,
@@ -368,8 +367,7 @@ ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size)
 		return -ENOMEM;
 	}
 
-	/* Do not support lseek(), also don't allow more than the size of metric table */
-	if (size != sizeof(struct hsmp_metric_table)) {
+	if (size != sock->metric_tbl_size) {
 		dev_err(sock->dev, "Wrong buffer size\n");
 		return -EINVAL;
 	}
@@ -423,6 +421,7 @@ void hsmp_unmap_metric_tbls(struct hsmp_plat_device *pdev)
 			iounmap(sock->metric_tbl_addr);
 			sock->metric_tbl_addr = NULL;
 		}
+		sock->metric_tbl_size = 0;
 	}
 }
 EXPORT_SYMBOL_NS_GPL(hsmp_unmap_metric_tbls, AMD_HSMP);
@@ -432,6 +431,7 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 	struct hsmp_socket *sock = &hsmp_pdev.sock[sock_ind];
 	struct hsmp_message msg = { 0 };
 	phys_addr_t dram_addr;
+	size_t tbl_size;
 	int ret;
 
 	/*
@@ -442,6 +442,7 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 		iounmap(sock->metric_tbl_addr);
 		sock->metric_tbl_addr = NULL;
 	}
+	sock->metric_tbl_size = 0;
 
 	msg.sock_ind	= sock_ind;
 	msg.response_sz	= hsmp_msg_desc_table[HSMP_GET_METRIC_TABLE_DRAM_ADDR].response_sz;
@@ -460,11 +461,19 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 		dev_err(sock->dev, "Invalid DRAM address for metric table\n");
 		return -ENOMEM;
 	}
-	sock->metric_tbl_addr = ioremap(dram_addr, sizeof(struct hsmp_metric_table));
+	/* SMU returns table size from Family 1Ah Model 50h and forward */
+	if (msg.args[2])
+		tbl_size = msg.args[2];
+	else
+		tbl_size = sizeof(struct hsmp_metric_table);
+
+	sock->metric_tbl_addr = ioremap(dram_addr, tbl_size);
 	if (!sock->metric_tbl_addr) {
 		dev_err(sock->dev, "Failed to ioremap metric table addr\n");
 		return -ENOMEM;
 	}
+	sock->metric_tbl_size = tbl_size;
+
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(hsmp_get_tbl_dram_base, AMD_HSMP);
