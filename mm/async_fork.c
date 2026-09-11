@@ -148,6 +148,8 @@ static inline void async_fork_recover_mm(struct mm_struct *mm,
 	VMA_ITERATOR(vmi, mm, 0);
 
 	for_each_vma(vmi, vma) {
+		if (unlikely(xa_is_zero(vma)))
+			break;
 		mpnt = vma->async_fork_vma;
 		if (!mpnt || IS_ERR(mpnt))
 			continue;
