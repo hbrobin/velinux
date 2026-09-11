@@ -1176,8 +1176,10 @@ loop_out:
 		goto out;
 	} else if (ret ==  -EAGAIN) {
 		prealloc = page_copy_prealloc(src_mm, src_vma, addr);
-		if (!prealloc)
-			return -ENOMEM;
+		if (!prealloc) {
+			ret = -ENOMEM;
+			goto out;
+		}
 	} else if (ret) {
 		VM_WARN_ON_ONCE(1);
 	}
