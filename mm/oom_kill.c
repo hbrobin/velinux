@@ -545,6 +545,16 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 	bool ret = true;
 	VMA_ITERATOR(vmi, mm, 0);
 
+#ifdef CONFIG_ASYNC_FORK
+	/*
+	 * The OOM reaper must not block on another mm's mmap_lock.  Async
+	 * fork fixup may need the async child mm's mmap_lock, so retry
+	 * after the async fork state is gone.
+	 */
+	if (is_async_fork_mm(mm))
+		return false;
+#endif
+
 	/*
 	 * Tell all users of get_user/copy_from_user etc... that the content
 	 * is no longer stable. No barriers really needed because unmapping
