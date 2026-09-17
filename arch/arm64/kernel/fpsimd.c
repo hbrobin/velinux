@@ -436,6 +436,9 @@ static void task_fpsimd_load(void)
 			restore_ffr = system_supports_fa64();
 	}
 
+	if (system_supports_fpmr())
+		write_sysreg_s(current->thread.uw.fpmr, SYS_FPMR);
+
 	if (restore_sve_regs) {
 		WARN_ON_ONCE(current->thread.fp_type != FP_STATE_SVE);
 		sve_load_state(sve_pffr(&current->thread),
@@ -471,6 +474,9 @@ static void fpsimd_save(void)
 
 	if (test_thread_flag(TIF_FOREIGN_FPSTATE))
 		return;
+
+	if (system_supports_fpmr())
+		*(last->fpmr) = read_sysreg_s(SYS_FPMR);
 
 	/*
 	 * Save SVE state if it is live.
@@ -676,7 +682,7 @@ static void __fpsimd_to_sve(void *sst, struct user_fpsimd_state const *fst,
  * task->thread.uw.fpsimd_state must be up to date before calling this
  * function.
  */
-static void fpsimd_to_sve(struct task_struct *task)
+static inline void fpsimd_to_sve(struct task_struct *task)
 {
 	unsigned int vq;
 	void *sst = task->thread.sve_state;
@@ -700,7 +706,7 @@ static void fpsimd_to_sve(struct task_struct *task)
  * bytes of allocated kernel memory.
  * task->thread.sve_state must be up to date before calling this function.
  */
-static void sve_to_fpsimd(struct task_struct *task)
+static inline void sve_to_fpsimd(struct task_struct *task)
 {
 	unsigned int vq, vl;
 	void const *sst = task->thread.sve_state;
@@ -717,6 +723,12 @@ static void sve_to_fpsimd(struct task_struct *task)
 		p = (__uint128_t const *)ZREG(sst, vq, i);
 		fst->vregs[i] = arm64_le128_to_cpu(*p);
 	}
+}
+
+void cpu_enable_fpmr(const struct arm64_cpu_capabilities *__always_unused p)
+{
+	write_sysreg_s(read_sysreg_s(SYS_SCTLR_EL1) | SCTLR_EL1_EnFPM_MASK,
+		       SYS_SCTLR_EL1);
 }
 
 #ifdef CONFIG_ARM64_SVE
@@ -1679,6 +1691,9 @@ void fpsimd_flush_thread(void)
 		current->thread.svcr = 0;
 	}
 
+	if (system_supports_fpmr())
+		current->thread.uw.fpmr = 0;
+
 	current->thread.fp_type = FP_STATE_FPSIMD;
 
 	put_cpu_fpsimd_context();
@@ -1701,18 +1716,6 @@ void fpsimd_preserve_current_state(void)
 }
 
 /*
- * Like fpsimd_preserve_current_state(), but ensure that
- * current->thread.uw.fpsimd_state is updated so that it can be copied to
- * the signal frame.
- */
-void fpsimd_signal_preserve_current_state(void)
-{
-	fpsimd_preserve_current_state();
-	if (current->thread.fp_type == FP_STATE_SVE)
-		sve_to_fpsimd(current);
-}
-
-/*
  * Associate current's FPSIMD context with this cpu
  * The caller must have ownership of the cpu FPSIMD context before calling
  * this function.
@@ -1728,6 +1731,7 @@ static void fpsimd_bind_task_to_cpu(void)
 	last->sve_vl = task_get_sve_vl(current);
 	last->sme_vl = task_get_sme_vl(current);
 	last->svcr = &current->thread.svcr;
+	last->fpmr = &current->thread.uw.fpmr;
 	last->fp_type = &current->thread.fp_type;
 	last->to_save = FP_STATE_CURRENT;
 	current->thread.fpsimd_cpu = smp_processor_id();
@@ -1803,30 +1807,14 @@ void fpsimd_restore_current_state(void)
 	put_cpu_fpsimd_context();
 }
 
-/*
- * Load an updated userland FPSIMD state for 'current' from memory and set the
- * flag that indicates that the FPSIMD register contents are the most recent
- * FPSIMD state of 'current'. This is used by the signal code to restore the
- * register state when returning from a signal handler in FPSIMD only cases,
- * any SVE context will be discarded.
- */
 void fpsimd_update_current_state(struct user_fpsimd_state const *state)
 {
 	if (WARN_ON(!system_supports_fpsimd()))
 		return;
 
-	get_cpu_fpsimd_context();
-
 	current->thread.uw.fpsimd_state = *state;
 	if (current->thread.fp_type == FP_STATE_SVE)
 		fpsimd_to_sve(current);
-
-	task_fpsimd_load();
-	fpsimd_bind_task_to_cpu();
-
-	clear_thread_flag(TIF_FOREIGN_FPSTATE);
-
-	put_cpu_fpsimd_context();
 }
 
 /*
@@ -1854,6 +1842,17 @@ void fpsimd_flush_task_state(struct task_struct *t)
 	set_tsk_thread_flag(t, TIF_FOREIGN_FPSTATE);
 
 	barrier();
+}
+
+void fpsimd_save_and_flush_current_state(void)
+{
+	if (!system_supports_fpsimd())
+		return;
+
+	get_cpu_fpsimd_context();
+	fpsimd_save();
+	fpsimd_flush_task_state(current);
+	put_cpu_fpsimd_context();
 }
 
 /*
