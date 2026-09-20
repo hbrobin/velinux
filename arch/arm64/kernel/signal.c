@@ -194,7 +194,7 @@ static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
 		&current->thread.uw.fpsimd_state;
 	int err;
 
-	sve_sync_to_fpsimd(current);
+	fpsimd_sync_from_effective_state(current);
 
 	/* copy the FP and status/control registers */
 	err = __copy_to_user(ctx->vregs, fpsimd->vregs, sizeof(fpsimd->vregs));
@@ -236,6 +236,7 @@ static int restore_fpsimd_context(struct user_ctxs *user)
 		return err;
 
 	clear_thread_flag(TIF_SVE);
+	current->thread.svcr &= ~SVCR_SM_MASK;
 	current->thread.fp_type = FP_STATE_FPSIMD;
 
 	/* load the hardware registers from the fpsimd_state structure */
@@ -1145,22 +1146,9 @@ static void setup_return(struct pt_regs *regs, struct k_sigaction *ka,
 
 	/* Signal handlers are invoked with ZA and streaming mode disabled */
 	if (system_supports_sme()) {
-		/*
-		 * If we were in streaming mode the saved register
-		 * state was SVE but we will exit SM and use the
-		 * FPSIMD register state.
-		 *
-		 * TODO: decide if this should behave as SMSTOP (e.g. reset
-		 * FPSR + FPMR), or whether this should only clear the scalable
-		 * registers + ZA state.
-		 */
-		if (current->thread.svcr & SVCR_SM_MASK) {
-			memset(&current->thread.uw.fpsimd_state, 0,
-			       sizeof(current->thread.uw.fpsimd_state));
-			current->thread.fp_type = FP_STATE_FPSIMD;
-		}
-
-		current->thread.svcr &= ~(SVCR_ZA_MASK | SVCR_SM_MASK);
+		task_smstop_sm(current);
+		current->thread.svcr &= ~SVCR_ZA_MASK;
+		write_sysreg_s(0, SYS_TPIDR2_EL0);
 	}
 
 	if (ka->sa.sa_flags & SA_RESTORER)
